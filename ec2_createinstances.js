@@ -2,7 +2,7 @@
 var AWS = require('aws-sdk');
 var fs = require('fs');
 const path = require('path');
-AWS.config.loadFromPath('config\\rootkey.json');
+AWS.config.loadFromPath('config/rootkey.json');
 
 function createKeyPair(userKeyName) {
     return new Promise((resolve, reject) => {

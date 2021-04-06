@@ -5,9 +5,9 @@ const ec2Controller = require('../ec2_createinstances')
 const { exec } = require("child_process");
 
 //Reading the required files 
-const inboundRules = fs.readFileSync('config\\inboundRules.json', 'utf-8');
+const inboundRules = fs.readFileSync('config/inboundRules.json', 'utf-8');
 const parsedRules = JSON.parse(inboundRules);
-const userData = fs.readFileSync('config\\userdata', 'utf-8');
+const userData = fs.readFileSync('config/userdata', 'utf-8');
 
 //Converting userData to base64
 let buff = new Buffer.from(userData);
