@@ -1,0 +1,19 @@
+#!/bin/bash
+cd /home/bitnami 
+curl -fsSL https://deb.nodesource.com/setup_14.x | bash - >> /tmp/curl-out.txt
+apt-get install -y nodejs-legacy >> /tmp/apt-out.txt
+/opt/bitnami/git/bin/git clone https://github.com/simransindhwani/docker-trial2.git 
+cd docker-trial2
+cd taskZero
+/usr/bin/npm install >> /tmp/node-front.txt
+node_modules/@angular/cli/bin/ng build
+cd ..
+cd backend
+/usr/bin/npm install >> /tmp/node-back.txt
+/opt/bitnami/ctlscript.sh stop apache
+apt update
+apt install -y nginx >> /tmp/nginx-install.txt 
+echo -e "server {\n  listen 80;\n  listen [::]:80;\n\n  server_name blog1.sasidhar.me;\n\n  location / {\n  proxy_pass http://127.0.0.1:3000;\n }\n} " >> /etc/nginx/sites-available/blog1.sasidhar.me
+ln -s /etc/nginx/sites-available/blog1.sasidhar.me /etc/nginx/sites-enabled/blog1.sasidhar.me
+systemctl restart nginx
+/usr/bin/node index.js
