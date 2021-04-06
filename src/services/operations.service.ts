@@ -9,12 +9,12 @@ export class OperationsService {
 
   constructor(private httpclient:HttpClient) { }
   getComments(data): Observable<any>{
-    return this.httpclient.post('http://3.143.33.7/:3000/awsAutomation',data);
+    return this.httpclient.post('http://3.143.33.7:3000/awsAutomation',data);
 
   }
 
   callNodeJsExecuter(command){
     let data = {"commands":command}
-    return this.httpclient.post('http://3.143.33.7/:3000/commandsexec',data);
+    return this.httpclient.post('http://3.143.33.7:3000/commandsexec',data);
   }
 }
