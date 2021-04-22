@@ -17,4 +17,9 @@ export class OperationsService {
     let data = {"commands":command}
     return this.httpclient.post('http://3.143.33.7:3000/commandsexec',data);
   }
+
+  newupdate(update){
+    let change = {"upgrade":update}
+    return this.httpclient.post('http://3.143.33.7:3000/clone',update);
+  }
 }

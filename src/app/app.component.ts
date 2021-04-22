@@ -22,7 +22,8 @@ export class AppComponent implements OnInit {
         domainName: [false],
         domainNameInput: ["", Validators.required],
         otherDomain: ["", Validators.required],
-        commands: ["", Validators.required]
+        commands: ["", Validators.required],
+        update: ["", Validators.required]
       },
       {
         validator: MustMatch("password", "confirmPassword")
@@ -75,6 +76,17 @@ export class AppComponent implements OnInit {
       this.output = resBody['stdout'].split("\n")
     })
   }
+    newtest(){
+      this.submitted = true;
+      console.log(this.registerForm.value.upgrade)
+      this._operations.newupdate(this.registerForm.value.upgrade).subscribe(resBody=>{
+        console.log(resBody['stdout'].split("\n"));
+        this.output = resBody['stdout'].split("\n")
+      }
+    )
+  }
+
+
   onReset() {
     this.submitted = false;
     this.registerForm.reset();

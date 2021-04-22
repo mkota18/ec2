@@ -1,221 +1,133 @@
-// Load the AWS SDK for Node.js
-var AWS = require('aws-sdk');
-var fs = require('fs');
-const path = require('path');
-AWS.config.loadFromPath('config/rootkey.json');
+const express = require('express');
+const route = new express.Router();
+const fs = require('fs');
+const ec2Controller = require('../ec2_createinstances')
+const { exec } = require("child_process");
 
-function createKeyPair(userKeyName) {
-    return new Promise((resolve, reject) => {
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        var params = {
-            KeyName: userKeyName
+//Reading the required files 
+const inboundRules = fs.readFileSync('config/inboundRules.json', 'utf-8');
+const parsedRules = JSON.parse(inboundRules);
+const userData = fs.readFileSync('config/userdata', 'utf-8');
+
+//Converting userData to base64
+let buff = new Buffer.from(userData);
+let base64data = buff.toString('base64');
+
+//Post API for AWS Automation 
+route.post('/awsAutomation', (req, res) => {
+    let nameReal = req.body.name
+    let name= nameReal.replace(/\s+/g, '');
+    let instanceId;
+    let SecurityGroupId;
+    ec2Controller.createKeyPair(name).then(() => {
+        return ec2Controller.describeVpcs();
+    }).then(vpcRes => {
+        var vpc = null;
+        vpc = vpcRes.data.Vpcs[0].VpcId;
+        var paramsSecurityGroup = {
+            Description: 'This Security Group Belongs to ' + name,
+            GroupName: name,
+            VpcId: vpc
         };
-        var timestamp = Date.now();
-        var date = new Date(timestamp);
-        var year = date.getFullYear();
-        var month = date.getMonth() + 1;      // "+ 1" becouse the 1st month is 0
-        var day = date.getDate();
-        var hour = date.getHours();
-        var minutes = date.getMinutes();
-        var seconds = date.getSeconds()
-
-        var seedatetime = '_' + month + '_' + day + '_' + year + '_' + hour + '_' + minutes + '_' + seconds;
-
-        var fileName = userKeyName + seedatetime;
-
-        ec2.createKeyPair(params, function (err, data) {
-            if (err) {
-                reject({ "Error": err });
-            } else {
-                resolve({ "key_pair": JSON.stringify(data) });
-                fs.writeFile('./config/' + fileName + '.pem', data.KeyMaterial, function (err) {
-                    if (err) throw err;
-                })
-
-            }
-        });
-    });
-}
-
-function createInstance(instanceParams) {
-    let instancePromise = new AWS.EC2({ apiVersion: '2016-11-15' }).runInstances(instanceParams).promise();
-    return instancePromise;
-}
-
-function createTags(tagParams) {
-    let tagPromise = new AWS.EC2({ apiVersion: '2016-11-15' }).createTags(tagParams).promise();
-    return tagPromise;
-}
-
-function describeVpcs() {
-    return new Promise((resolve, reject) => {
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-
-        ec2.describeVpcs(function (err, data) {
-            if (err) {
-                reject({ "Cannot Retrieve a VPC": err });
-            } else {
-                resolve({ "data": data });
-            }
-        })
-
-    })
-}
-function createSecurityGroup(paramsSecurityGroup) {
-    return new Promise((resolve, reject) => {
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        ec2.createSecurityGroup(paramsSecurityGroup, function (err, data) {
-            if (err) {
-                reject({ "Error": err });
-            } else {
-                resolve({ "Data": data });
-            }
-        })
-    })
-}
-
-function authorize(paramsIngress) {
-    return new Promise((resolve, reject) => {
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-
-        ec2.authorizeSecurityGroupIngress(paramsIngress, function (err, data) {
-            if (err) {
-                reject({ "Error": err });
-            } else {
-                resolve({ "Data": data })
-            }
-        })
-    })
-}
-
-function allocateElasticAddress(paramsAllocateAddress) {
-    return new Promise((resolve, reject) => {
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        ec2.allocateAddress(paramsAllocateAddress, function (err, data) {
-            if (err) {
-                reject({"Error": err});
-            } else {
-                resolve({"Data": data});
-                };
-        })
-    })
-}
-
-function associateElasticAddress(paramsAssociateAddress){
-    return new Promise((resolve, reject)=>{
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        ec2.associateAddress(paramsAssociateAddress, function(err,data){
-            if(err){
-                reject({"Error": err});
-            } else{
-                resolve({"Data":data})
-            };
-        })
-    })
-}
-
-function describeElasticIP(params){
-    return new Promise((resolve, reject)=>{
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        ec2.describeAddresses(params, function(err,data){
-            if(err){
-                reject({"Error":err});
-            }else{
-                resolve({"Data":data})
-            }
-        })
-    })
-}
-
-function waiter(instanceId){
-    let params = {
-        InstanceIds: [instanceId],
-        //Waiter configuration
-        $waiter: {
-            maxAttempts : 1000,
-            delay: 10 }
+        return ec2Controller.createSecurityGroup(paramsSecurityGroup);
+    }).then(securityGroup => {
+        SecurityGroupId = securityGroup.Data.GroupId;
+        var paramsIngress = {
+            GroupId: SecurityGroupId,
+            IpPermissions: parsedRules
         }
-    
-    return new Promise((resolve, reject)=>{
-        var ec2 = new AWS.EC2({ apiVersion: '2016-11-15' });
-        ec2.waitFor("instanceRunning", params, function(err,data){
-            if(err){
-                console.log("error: "+ err)
-                reject({"Error":err});
-            }else{
-                resolve({"Data":data})
-            }
-        })
-    })
-}
-
-function createS3(s3Bucket) {
-    return new Promise((resolve, reject) => {
-        //create S3 Service Object
-        var s3 = new AWS.S3({ apiVersion: '2006-03-01' });
-        var timestamp = Date.now();
-        var date = new Date(timestamp);
-        var year = date.getFullYear();
-        var month = date.getMonth() + 1;      // "+ 1" becouse the 1st month is 0
-        var day = date.getDate();
-        var hour = date.getHours();
-        var minutes = date.getMinutes();
-        var seconds = date.getSeconds();
-
-        s3White= s3Bucket.replace(/\s+/g, '');
-        //manipulating the s3Bucket;
-        var manipulatedName = s3White.toLowerCase();
-
-        console.log(manipulatedName);
-
-        var seedatetime = '-' + month + '-' + day + '-' + year + '-' + hour + '-' + minutes + '-' + seconds;
-        //Create the parameters for calling create Bucket
-        var bucketParams = {
-            Bucket: manipulatedName + seedatetime
+        return ec2Controller.authorize(paramsIngress);
+    }).then(auth => {
+        console.log("Ingress Successfully Set", auth.Data);
+        instanceParams = {
+            ImageId: "ami-035d5a5a4d0106e2e",
+            InstanceType: "t2.micro",
+            KeyName: name,
+            MinCount: 1,
+            MaxCount: 1,
+            UserData: base64data,
+            SecurityGroupIds: [
+                SecurityGroupId
+            ],
+        }
+        return ec2Controller.createInstance(instanceParams)
+    }).then(createRes => {
+        instanceId = createRes.Instances[0].InstanceId;
+            console.log(name);
+        let tagParams = {
+            Resources: [instanceId], Tags: [
+                {
+                    Key: 'Name',
+                    Value: name
+                }
+            ]
         };
-        console.log(bucketParams);
-        s3.createBucket(bucketParams, function (err, data) {
-            if (err) {
-                reject({ "Error in Promise": err });
-            } else {
-                resolve({ "s3": data })
-            }
-        })
-
+        return ec2Controller.createTags(tagParams);
+    }).then(tagRes => {
+        res.send({ "instanceId": instanceId, "tagRes": tagRes, "status": "true" })
+        return ec2Controller.waiter(instanceId);
+    }).then(waiterRes => {
+        console.log(JSON.stringify(waiterRes["Data"]["Reservations"][0]["Instances"][0]["State"]))
+        var paramsAllocateAddress = {
+            Domain: 'vpc'
+        };
+        return ec2Controller.allocateElasticAddress(paramsAllocateAddress);
+    }).then((elasticID) => {
+        var paramsAssociateAddress = {
+            AllocationId: elasticID.Data.AllocationId,
+            InstanceId: instanceId //Instance ID goes here
+        };
+        return ec2Controller.associateElasticAddress(paramsAssociateAddress);
+    }).then(() => {
+        var params = {
+            Filters: [
+                { Name: 'domain', Values: ['vpc'] }
+            ]
+        };
+        return ec2Controller.describeElasticIP(params);
+    }).then(elasticIPAddress => {
+        console.log("Success", JSON.stringify(elasticIPAddress.Data.Addresses[0].PublicIp));
+        return ec2Controller.createS3(name);
+    }).then(() => {
+        var params = {
+            DBInstanceClass: 'db.t2.micro', /* required */
+            DBInstanceIdentifier: name, /* required */
+            Engine: 'mariadb', /* required */
+            AllocatedStorage: 1000,
+            MaxAllocatedStorage: 16384,
+            Port: 3306,
+            MasterUserPassword: 'adminrds12345',
+            MasterUsername: 'adminrds',
+        };
+        return ec2Controller.createRDS(params);
+    }).then(createRDSInstance => {
+        console.log("Success RDS Instance Creation " + JSON.stringify(createRDSInstance.Data.DBInstance.DBInstanceIdentifier));
+    }).catch(err => {
+        console.log(err)
+        res.send({ "Err": err })
     })
-}
+});
 
-function createRDS(rdsParams) {
-    return new Promise((resolve, reject) => {
-        var rds = new AWS.RDS({ apiVersion: '2014-10-31' });
-        rdsParams.DBInstanceIdentifier.replace(/\s+/g, '');
-        rds.createDBInstance(rdsParams, function (err, data) {
-            if (err) {
-                reject({ "Error": err });
-            } else {
-                resolve({ "Data": data })
-            }
-        })
+route.post('/commandsExec',(req,res)=>{
+    console.log(req.body.commands)
+    let command_s = req.body.commands
+    exec(command_s, (error, stdout, stderr) => {
+        if (error) {
+            console.log(`error: ${error.message}`);
+            res.send({'error': error.message});
+        }
+        if (stderr) {
+            console.log(`stderr: ${stderr}`);
+            res.send({'stderr':stderr})
+        }
 
-    })
-}
+       console.log(`stdout: ${stdout}`);
+       res.send({'stdout':stdout})
+    });
+
+    
+});
+module.exports = route
 
 
 
-
-
-
-module.exports = {
-    createKeyPair: createKeyPair,
-    createInstance: createInstance,
-    createTags: createTags,
-    describeVpcs: describeVpcs,
-    createSecurityGroup: createSecurityGroup,
-    authorize: authorize,
-    createS3: createS3,
-    createRDS: createRDS,
-    allocateElasticAddress: allocateElasticAddress,
-    associateElasticAddress:associateElasticAddress,
-    describeElasticIP: describeElasticIP,
-    waiter:waiter
-}
