@@ -1,0 +1,24 @@
+#!/bin/bash
+cd /home/bitnami 
+curl -fsSL https://deb.nodesource.com/setup_14.x | bash - >> /tmp/curl-out.txt
+apt-get install -y nodejs-legacy >> /tmp/apt-out.txt
+/opt/bitnami/git/bin/git clone https://github.com/simransindhwani/docker-trial2.git 
+/usr/bin/npm install forever -g
+cd docker-trial2
+cd taskZero
+/usr/bin/npm install >> /tmp/node-front.txt
+node_modules/@angular/cli/bin/ng build
+cd ..
+cd backend
+/usr/bin/npm install >> /tmp/node-back.txt
+/opt/bitnami/ctlscript.sh stop apache
+apt update
+apt install -y nginx >> /tmp/nginx-install.txt 
+echo -e "server {\n  listen 80;\n  listen [::]:80;\n\n  server_name {{First_Domain_Name}};\n\n  location / {\n  proxy_pass http://127.0.0.1:3000;\n }\n} " >> /etc/nginx/sites-available/{{First_Domain_Name}}
+ln -s /etc/nginx/sites-available/{{First_Domain_Name}} /etc/nginx/sites-enabled/{{First_Domain_Name}}
+echo -e "server {\n  listen 80;\n  listen [::]:80;\n\n  server_name {{Sec_Domain_Name}};\n\n  location / {\n  proxy_pass http://127.0.0.1:3030;\n }\n} " >> /etc/nginx/sites-available/{{Sec_Domain_Name}}
+ln -s /etc/nginx/sites-available/{{Sec_Domain_Name}} /etc/nginx/sites-enabled/{{Sec_Domain_Name}}
+
+systemctl restart nginx
+NODE_ENV=production /usr/bin/forever start index.js
+NODE_ENV=development /usr/bin/forever start index.js
